@@ -1,11 +1,15 @@
 package com.floreantpos.main;
 
+import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Point;
+import java.awt.Color;
 import java.awt.Toolkit;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -15,6 +19,7 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.Timer;
 import javax.swing.UIManager;
+import javax.swing.plaf.ColorUIResource;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -32,8 +37,10 @@ import com.floreantpos.model.dao.RestaurantDAO;
 import com.floreantpos.model.dao.TerminalDAO;
 import com.floreantpos.model.dao._RootDAO;
 import com.floreantpos.swing.GlassPane;
+import com.floreantpos.swing.TransparentPanel;
 import com.floreantpos.ui.dialog.NumberSelectionDialog;
 import com.floreantpos.ui.views.LoginScreen;
+import com.floreantpos.ui.views.PasswordScreen;
 import com.floreantpos.ui.views.order.RootView;
 import com.floreantpos.util.TicketActiveDateSetterTask;
 import com.jgoodies.looks.plastic.PlasticXPLookAndFeel;
@@ -43,7 +50,7 @@ public class Application {
 	private static Log logger = LogFactory.getLog(Application.class);
 
 	private Timer autoDrawerPullTimer;
-
+	
 	private Terminal terminal;
 	private PosWindow posWindow;
 	private User currentUser;
@@ -59,7 +66,7 @@ public class Application {
 	private static SimpleDateFormat dateFormat = new SimpleDateFormat("dd MMM, yyyy");
 	private static ImageIcon applicationIcon;
 
-	public final static String VERSION = ApplicationConfig.getConfiguration().getString("floreantpos.version");
+	public final static String VERSION = "1.0_4";
 
 	private Application() {
 		applicationIcon = new ImageIcon(getClass().getResource("/icons/icon.png"));
@@ -70,17 +77,34 @@ public class Application {
 		posWindow.addWindowListener(new WindowAdapter() {
 			public void windowClosing(WindowEvent e) {
 				shutdownPOS();
-
+				
 			}
 		});
 	}
 
 	public void start() {
-		setApplicationLook();
+		try {
+			PlasticXPLookAndFeel.setMyCurrentTheme(new ExperienceBlue());
+			UIManager.put("TextField.background", new ColorUIResource(new Color(200, 100, 155)));
+			UIManager.put("control", new ColorUIResource(new Color(169, 46, 34)));
+			UIManager.put("background", new ColorUIResource(new Color(82, 80, 80)));
+			//UIManager.setLookAndFeel(new PlasticXPLookAndFeel());
+			UIManager.setLookAndFeel(new javax.swing.plaf.nimbus.NimbusLookAndFeel());
+			UIManager.put("ComboBox.is3DEnabled", Boolean.FALSE);
+			//UIManager.put("TextField.background", new ColorUIResource(new Color(82, 82, 80)));
+			//UIManager.put("Panel.background", new ColorUIResource(new Color(82, 80, 80)));
+			//UIManager.put("TextField.background", new ColorUIResource(new Color(200, 100, 155)));
+			//UIManager.put("control", new ColorUIResource(new Color(169, 46, 34)));
+		} catch (Exception e) {
+		}
 
 		rootView = RootView.getInstance();
 
-		posWindow.setContentPane(rootView);
+		TransparentPanel panel = new TransparentPanel(new BorderLayout());
+		panel.setOpaque(true);
+		panel.add(rootView);
+
+		posWindow.setContentPane(panel);
 		posWindow.setSize(ApplicationConfig.getPreferences().getInt("wwidth", 900), ApplicationConfig.getPreferences().getInt("wheight", 650));
 		Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 		posWindow.setLocation(ApplicationConfig.getPreferences().getInt("wlocx", ((screenSize.width - posWindow.getWidth()) >> 1)), ApplicationConfig.getPreferences().getInt("wlocy", ((screenSize.height - posWindow.getHeight()) >> 1)));
@@ -91,24 +115,15 @@ public class Application {
 		initDatabase();
 	}
 
-	private void setApplicationLook() {
-		try {
-			PlasticXPLookAndFeel.setPlasticTheme(new ExperienceBlue());
-			UIManager.setLookAndFeel(new PlasticXPLookAndFeel());
-			UIManager.put("ComboBox.is3DEnabled", Boolean.FALSE);
-		} catch (Exception ignored) {
-		}
-	}
-
 	public void initDatabase() {
 		if(!ApplicationConfig.checkDatabaseConnection()) {
-			DatabaseConfigurationDialog dialog = new DatabaseConfigurationDialog(getPosWindow(), false );
+			DatabaseConfigurationDialog dialog = new DatabaseConfigurationDialog(getPosWindow(), true);
 			dialog.setTitle(com.floreantpos.POSConstants.DATABASE_CONNECTION_ERROR);
-			dialog.setExitOnClose(false);
+			dialog.setExitOnClose(true);
 			dialog.pack();
 			dialog.open();
 		}
-
+		
 
 		try {
 			((GlassPane) posWindow.getGlassPane()).setMessage(com.floreantpos.POSConstants.LOADING);
@@ -142,22 +157,24 @@ public class Application {
 			if(printConfiguration == null) {
 				printConfiguration = new PrinterConfiguration();
 			}
-
+			
 			refreshRestaurant();
-
+			
+			PasswordScreen.getInstance().setUserTypes();
+			
 			Calendar calendar = Calendar.getInstance();
 			calendar.set(Calendar.DAY_OF_MONTH, calendar.get(Calendar.DAY_OF_MONTH) + 1);
 			calendar.set(Calendar.HOUR_OF_DAY, 0);
 			calendar.set(Calendar.MINUTE, 0);
 			calendar.set(Calendar.SECOND, 0);
-
+			
 			//SimpleDateFormat format = new SimpleDateFormat("yyyy MMM dd HH:mm:s a");
 			Date time = calendar.getTime();
 			//System.out.println("expected next launch: " + format.format(time));
 
 			TicketActiveDateSetterTask ticketActiveDateSetterTask = new TicketActiveDateSetterTask();
 			ticketActiveDateSetterTask.run();
-
+			
 			java.util.Timer activeDateScheduler = new java.util.Timer();
 			activeDateScheduler.scheduleAtFixedRate(ticketActiveDateSetterTask, time, 86400*1000);
 		} finally {
@@ -179,7 +196,7 @@ public class Application {
 			}
 		}
 	}
-
+	
 	public static String getCurrencyName() {
 		Application application = getInstance();
 		if(application.restaurant == null) {
@@ -209,7 +226,7 @@ public class Application {
 		if(option != JOptionPane.YES_OPTION) {
 			return;
 		}
-
+		
 		int width = posWindow.getWidth();
 		int height = posWindow.getHeight();
 		ApplicationConfig.getPreferences().putInt("wwidth", width);
@@ -262,7 +279,7 @@ public class Application {
 	}
 
 	public Terminal getTerminal() {
-
+		
 		TerminalDAO.getInstance().refresh(terminal);
 
 		return terminal;
@@ -283,9 +300,20 @@ public class Application {
 		}
 		return value;
 	}
+	
+	public static Double parseNumber(String number) throws NumberFormatException {
+	  NumberFormat numberFormat = NumberFormat.getNumberInstance(); 
+	  ParsePosition parsePosition = new ParsePosition(0);
+	  Number n = numberFormat.parse(number, parsePosition);
+	  if(n == null || parsePosition.getIndex() != number.length()) {
+	    throw new NumberFormatException();
+	  }
+	  return n.doubleValue();
+	}
+	
 
 	public static String getTitle() {
-		return "Floreant POS - Version " + VERSION;
+		return "Café TE - POS " + VERSION;
 	}
 
 	public static ImageIcon getApplicationIcon() {
@@ -307,7 +335,7 @@ public class Application {
 	public void setCurrentShift(Shift currentShift) {
 		this.currentShift = currentShift;
 	}
-
+	
 	public void setAutoDrawerPullEnable(boolean enable) {
 		if(enable) {
 			if(autoDrawerPullTimer != null) {
